@@ -1,0 +1,12 @@
+[tasks.build]
+run = "go build ."
+
+[tasks.dev]
+run = "air"
+
+[tasks.fmt]
+description = "Format Go files"
+run = "go fmt ./..."
+
+[tools]
+"go:github.com/air-verse/air" = "latest"
