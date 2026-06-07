@@ -11,11 +11,11 @@ func main() {
 	cfg := NewApiConfig()
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", middlewareLog(healthHandler{}))
-	mux.Handle("/app/", cfg.middlewareMetrics(http.StripPrefix("/app", http.FileServer(http.Dir("public")))))
 
-	mux.HandleFunc("GET /metrics", cfg.handleMetrics)
-	mux.HandleFunc("POST /reset", cfg.handleReset)
+	mux.HandleFunc("GET /admin/metrics", cfg.handleMetrics)
+	mux.HandleFunc("POST /admin/reset", cfg.handleReset)
+	mux.Handle("GET /api/healthz", middlewareLog(healthHandler{}))
+	mux.Handle("/app/", cfg.middlewareMetrics(http.StripPrefix("/app", http.FileServer(http.Dir("public")))))
 
 	server := &http.Server{Addr: ":8080", Handler: mux}
 	server.ListenAndServe()
@@ -36,9 +36,17 @@ func (cfg *apiConfig) middlewareMetrics(next http.Handler) http.Handler {
 	})
 }
 
+const adminMetricsTemplate string = `<html>
+  <body>
+    <h1>Welcome, Chirpy Admin</h1>
+    <p>Chirpy has been visited %d times!</p>
+  </body>
+</html>`
+
 func (cfg *apiConfig) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Hits: %d", cfg.hits.Load())
+	fmt.Fprintf(w, adminMetricsTemplate, cfg.hits.Load())
 }
 
 func (cfg *apiConfig) handleReset(w http.ResponseWriter, r *http.Request) {
