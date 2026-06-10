@@ -3,17 +3,72 @@ package routes
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/alexedwards/argon2id"
+	"github.com/faymndev/chirpy/internal/auth"
+	"github.com/faymndev/chirpy/internal/database"
 	"github.com/faymndev/chirpy/internal/middleware"
 )
 
 func UseUsers(mux *http.ServeMux, state *middleware.State) {
+	mux.Handle("POST /api/login", state.Middleware(handleLogin))
 	mux.Handle("POST /api/users", state.Middleware(handleCreateUser))
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	type Input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+	input := Input{}
+	if err := decoder.Decode(&input); err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
+
+	user, err := s.Db.GetUser(r.Context(), input.Email)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
+
+	match, err := argon2id.ComparePasswordAndHash(input.Password, user.Password)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	} else if !match {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid username or password combination",
+		})
+	}
+
+	type UserWithToken struct {
+		database.User
+		Token string `json:"token"`
+	}
+
+	expiresIn, _ := time.ParseDuration("24h")
+	token, err := auth.MakeJWT(user.ID, expiresIn)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
+
+	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token})
 }
 
 func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	type Input struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 
 	// decode body
@@ -26,7 +81,17 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 		})
 	}
 
-	user, err := s.Db.CreateUser(r.Context(), input.Email)
+	hashedPassword, err := argon2id.CreateHash(input.Password, argon2id.DefaultParams)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Failed to hash password",
+		})
+	}
+
+	user, err := s.Db.CreateUser(r.Context(), database.CreateUserParams{
+		Email:    input.Email,
+		Password: hashedPassword,
+	})
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",

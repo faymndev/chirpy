@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/faymndev/chirpy/internal/auth"
 	"github.com/faymndev/chirpy/internal/database"
 	"github.com/faymndev/chirpy/internal/middleware"
 	"github.com/google/uuid"
@@ -57,16 +58,31 @@ func handleGetChirps(w http.ResponseWriter, r *http.Request, s *middleware.State
 }
 
 func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "JWT token not provided",
+		})
+		return
+	}
+
+	userID, err := auth.VerifyJWT(token)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid JWT token",
+		})
+		return
+	}
+
 	type Input struct {
-		UserID uuid.UUID `json:"user_id"`
-		Body   string    `json:"body"`
+		Body string `json:"body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
 
 	input := Input{}
-	err := decoder.Decode(&input)
+	err = decoder.Decode(&input)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
@@ -80,7 +96,7 @@ func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	}
 
 	chirp, err := s.Db.CreateChirp(r.Context(), database.CreateChirpParams{
-		UserID: input.UserID,
+		UserID: userID,
 		Body:   cleanBody(input.Body),
 	})
 	if err != nil {
