@@ -1,18 +1,36 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 
+	"github.com/faymndev/chirpy/internal/database"
 	"github.com/faymndev/chirpy/internal/middleware"
 	"github.com/faymndev/chirpy/internal/routes"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	db, err := sql.Open("postgres", os.Getenv("DB_URL"))
+	if err != nil {
+		log.Fatal("Error connecting to database")
+	}
+
+	dbQueries := database.New(db)
 	mux := http.NewServeMux()
 
 	metrics := routes.UseMetrics(mux)
 	routes.UseChirp(mux)
+	routes.UseUsers(mux, dbQueries)
 
 	mux.Handle("GET /api/healthz", middleware.MiddlewareLog((healthHandler{})))
 	mux.Handle("/app/", metrics.Middleware(http.StripPrefix("/app", http.FileServer(http.Dir("public")))))
