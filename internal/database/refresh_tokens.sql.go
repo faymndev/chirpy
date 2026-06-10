@@ -61,7 +61,7 @@ func (q *Queries) GetRefreshToken(ctx context.Context, userID uuid.UUID) (Refres
 
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
 update refresh_tokens
-set revoked_at = $1
+set revoked_at = $1, updated_at = now()
 where token = $2
 `
 
@@ -77,7 +77,7 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, arg RevokeRefreshToken
 
 const setRefreshToken = `-- name: SetRefreshToken :exec
 update refresh_tokens 
-set token = $1
+set token = $1, updated_at = now()
 where user_id = $2
 `
 

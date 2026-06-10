@@ -71,13 +71,13 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		return
 	}
 
-	var accessToken string
-	if refreshToken.RevokedAt.Valid {
-		accessToken = refreshToken.Token
+	var newRefreshToken string
+	if refreshToken.RevokedAt.Valid && refreshToken.ExpiresAt.Compare(time.Now()) == 1 {
+		newRefreshToken = refreshToken.Token
 	} else {
-		accessToken = auth.MakeRefreshToken()
+		newRefreshToken = auth.MakeRefreshToken()
 		err = s.Db.SetRefreshToken(r.Context(), database.SetRefreshTokenParams{
-			Token:  accessToken,
+			Token:  newRefreshToken,
 			UserID: user.ID,
 		})
 		if err != nil {
@@ -89,11 +89,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 
 	type UserWithToken struct {
 		database.User
-		Token       string `json:"token"`
-		AccessToken string `json:"access_token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
-	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token, AccessToken: accessToken})
+	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token, RefreshToken: newRefreshToken})
 }
 
 func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {

@@ -11,10 +11,10 @@ limit 1;
 
 -- name: RevokeRefreshToken :exec 
 update refresh_tokens
-set revoked_at = $1
+set revoked_at = $1, updated_at = now()
 where token = $2;
 
 -- name: SetRefreshToken :exec 
 update refresh_tokens 
-set token = $1
+set token = $1, updated_at = now()
 where user_id = $2;
