@@ -29,6 +29,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
 	user, err := s.Db.GetUser(r.Context(), input.Email)
@@ -36,6 +37,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
 	match, err := argon2id.ComparePasswordAndHash(input.Password, user.Password)
@@ -43,26 +45,55 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	} else if !match {
 		SendJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "Invalid username or password combination",
 		})
+		return
 	}
 
-	type UserWithToken struct {
-		database.User
-		Token string `json:"token"`
-	}
-
-	expiresIn, _ := time.ParseDuration("24h")
+	expiresIn, _ := time.ParseDuration("1h")
 	token, err := auth.MakeJWT(user.ID, expiresIn)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
-	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token})
+	// do we already have a refresh token?
+	refreshToken, err := s.Db.GetRefreshToken(r.Context(), user.ID)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	var accessToken string
+	if refreshToken.RevokedAt.Valid {
+		accessToken = refreshToken.Token
+	} else {
+		accessToken = auth.MakeRefreshToken()
+		err = s.Db.SetRefreshToken(r.Context(), database.SetRefreshTokenParams{
+			Token:  accessToken,
+			UserID: user.ID,
+		})
+		if err != nil {
+			SendJSON(w, http.StatusInternalServerError, map[string]any{
+				"error": "Something went wrong",
+			})
+		}
+	}
+
+	type UserWithToken struct {
+		database.User
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
+	}
+
+	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token, AccessToken: accessToken})
 }
 
 func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {

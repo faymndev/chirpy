@@ -6,10 +6,15 @@ returning *;
 
 -- name: GetRefreshToken :one
 select * from refresh_tokens
-where id = $1
+where user_id = $1
 limit 1;
 
 -- name: RevokeRefreshToken :exec 
 update refresh_tokens
 set revoked_at = $1
-where id = $2;
+where token = $2;
+
+-- name: SetRefreshToken :exec 
+update refresh_tokens 
+set token = $1
+where user_id = $2;
