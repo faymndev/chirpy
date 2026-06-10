@@ -6,15 +6,20 @@ import (
 	"slices"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/faymndev/chirpy/internal/database"
+	"github.com/faymndev/chirpy/internal/middleware"
+	"github.com/google/uuid"
 )
 
-func UseChirp(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/validate_chirp", handleValidateChirp)
+func UseChirp(mux *http.ServeMux, state *middleware.State) {
+	mux.Handle("POST /api/chirps", state.Middleware(handleChirp))
 }
 
-func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
+func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	type Input struct {
-		Body string `json:"body"`
+		UserID uuid.UUID `json:"user_id"`
+		Body   string    `json:"body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -34,9 +39,18 @@ func handleValidateChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SendJSON(w, http.StatusOK, map[string]any{
-		"cleaned_body": cleanBody(input.Body),
+	chirp, err := s.Db.CreateChirp(r.Context(), database.CreateChirpParams{
+		UserID: input.UserID,
+		Body:   cleanBody(input.Body),
 	})
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	SendJSON(w, http.StatusOK, chirp)
 }
 
 var profane = []string{"kerfuffle", "sharbert", "fornax"}

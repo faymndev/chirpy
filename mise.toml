@@ -1,5 +1,5 @@
 [env]
-_.file = ".env.local"
+_.file = ".env"
 
 [tasks.build]
 run = "go build ."

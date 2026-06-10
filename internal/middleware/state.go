@@ -23,7 +23,7 @@ two potential usages:
 mux.HandleFunc("/handle", state.Middleware(handle))
 func handle(r, w, state)
 
-2. attach to another struct
+2. attach to another struct (preferred?)
 type Config struct {
 	State *middleware.State
 }
