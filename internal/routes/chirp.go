@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,7 +15,45 @@ import (
 )
 
 func UseChirp(mux *http.ServeMux, state *middleware.State) {
+	mux.Handle("GET /api/chirps", state.Middleware(handleGetChirps))
+	mux.Handle("GET /api/chirps/{chirpID}", state.Middleware(handleGetChirp))
 	mux.Handle("POST /api/chirps", state.Middleware(handleChirp))
+}
+
+func handleGetChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		SendJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "Invalid chirp ID",
+		})
+		return
+	}
+
+	chirp, err := s.Db.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	SendJSON(w, http.StatusOK, chirp)
+}
+
+func handleGetChirps(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	chirps, err := s.Db.GetChirps(r.Context())
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
+
+	SendJSON(w, http.StatusOK, chirps)
 }
 
 func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
@@ -50,7 +90,7 @@ func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		return
 	}
 
-	SendJSON(w, http.StatusOK, chirp)
+	SendJSON(w, http.StatusCreated, chirp)
 }
 
 var profane = []string{"kerfuffle", "sharbert", "fornax"}

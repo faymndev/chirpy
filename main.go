@@ -30,7 +30,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	metrics := routes.UseAdmin(mux, state)
-	routes.UseChirp(mux)
+	routes.UseChirp(mux, state)
 	routes.UseUsers(mux, state)
 
 	mux.Handle("GET /api/healthz", middleware.Log((healthHandler{})))
