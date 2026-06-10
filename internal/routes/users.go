@@ -4,32 +4,34 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/faymndev/chirpy/internal/database"
+	"github.com/faymndev/chirpy/internal/middleware"
 )
 
-func UseUsers(mux *http.ServeMux, db *database.Queries) {
-	mux.HandleFunc("POST /api/users", func(w http.ResponseWriter, r *http.Request) {
-		type Input struct {
-			Email string `json:"email"`
-		}
+func UseUsers(mux *http.ServeMux, state *middleware.State) {
+	mux.Handle("POST /api/users", state.Middleware(handleCreateUser))
+}
 
-		// decode body
-		decoder := json.NewDecoder(r.Body)
-		defer r.Body.Close()
-		input := Input{}
-		if err := decoder.Decode(&input); err != nil {
-			SendJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "Something went wrong",
-			})
-		}
+func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	type Input struct {
+		Email string `json:"email"`
+	}
 
-		user, err := db.CreateUser(r.Context(), input.Email)
-		if err != nil {
-			SendJSON(w, http.StatusInternalServerError, map[string]any{
-				"error": "Something went wrong",
-			})
-		}
+	// decode body
+	decoder := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+	input := Input{}
+	if err := decoder.Decode(&input); err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
 
-		SendJSON(w, http.StatusCreated, user)
-	})
+	user, err := s.Db.CreateUser(r.Context(), input.Email)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+	}
+
+	SendJSON(w, http.StatusCreated, user)
 }

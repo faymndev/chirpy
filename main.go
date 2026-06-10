@@ -26,13 +26,14 @@ func main() {
 	}
 
 	dbQueries := database.New(db)
+	state := &middleware.State{Db: *dbQueries}
 	mux := http.NewServeMux()
 
-	metrics := routes.UseMetrics(mux)
+	metrics := routes.UseAdmin(mux, state)
 	routes.UseChirp(mux)
-	routes.UseUsers(mux, dbQueries)
+	routes.UseUsers(mux, state)
 
-	mux.Handle("GET /api/healthz", middleware.MiddlewareLog((healthHandler{})))
+	mux.Handle("GET /api/healthz", middleware.Log((healthHandler{})))
 	mux.Handle("/app/", metrics.Middleware(http.StripPrefix("/app", http.FileServer(http.Dir("public")))))
 
 	server := &http.Server{Addr: ":8080", Handler: mux}
