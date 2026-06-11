@@ -133,7 +133,29 @@ func handleRefresh(w http.ResponseWriter, r *http.Request, s *middleware.State) 
 }
 
 func handleRevoke(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Refresh token not provided",
+		})
+		return
+	}
 
+	if _, err = s.Db.GetRefreshToken(r.Context(), token); err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid refresh token",
+		})
+		return
+	}
+
+	if err = s.Db.RevokeRefreshToken(r.Context(), token); err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Failed to revoke refresh token",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {

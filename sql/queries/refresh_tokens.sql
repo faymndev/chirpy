@@ -16,8 +16,8 @@ limit 1;
 
 -- name: RevokeRefreshToken :exec 
 update refresh_tokens
-set revoked_at = $1, updated_at = now()
-where token = $2;
+set revoked_at = now(), updated_at = now()
+where token = $1;
 
 -- name: SetRefreshToken :exec 
 update refresh_tokens 
