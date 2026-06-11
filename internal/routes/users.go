@@ -18,6 +18,7 @@ func UseUsers(mux *http.ServeMux, state *middleware.State) {
 	mux.Handle("POST /api/refresh", state.Middleware(handleRefresh))
 	mux.Handle("POST /api/revoke", state.Middleware(handleRevoke))
 	mux.Handle("POST /api/users", state.Middleware(handleCreateUser))
+	mux.Handle("PUT /api/users", state.Middleware(handleUpdateUser))
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
@@ -26,10 +27,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		Password string `json:"password"`
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
-	input := Input{}
-	if err := decoder.Decode(&input); err != nil {
+	input, err := DecodeBody[Input](r)
+	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Failed to decode request body",
 		})
@@ -168,11 +167,8 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 		Password string `json:"password"`
 	}
 
-	// decode body
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
-	input := Input{}
-	if err := decoder.Decode(&input); err != nil {
+	input, err := DecodeBody[Input](r)
+	if err != nil { 
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
@@ -196,4 +192,20 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 	}
 
 	SendJSON(w, http.StatusCreated, user)
+}
+
+func handleUpdateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any {
+			"error": "Invalid token",
+		})
+	}
+
+	userId, err := auth.VerifyJWT(token)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any {
+			"error": "Invalid token",
+		})
+	}
 }

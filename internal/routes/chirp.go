@@ -78,11 +78,7 @@ func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		Body string `json:"body"`
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
-
-	input := Input{}
-	err = decoder.Decode(&input)
+	input, err := DecodeBody[Input](r)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
