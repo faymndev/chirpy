@@ -1,7 +1,9 @@
 package routes
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -29,7 +31,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	input := Input{}
 	if err := decoder.Decode(&input); err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Something went wrong",
+			"error": "Failed to decode request body",
 		})
 		return
 	}
@@ -37,7 +39,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	user, err := s.Db.GetUser(r.Context(), input.Email)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Something went wrong",
+			"error": "Failed to get user by email",
 		})
 		return
 	}
@@ -45,7 +47,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	match, err := argon2id.ComparePasswordAndHash(input.Password, user.Password)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Something went wrong",
+			"error": "Failed to compare passwords",
 		})
 		return
 	} else if !match {
@@ -55,24 +57,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		return
 	}
 
-	expiresIn, _ := time.ParseDuration("1h")
-	token, err := auth.MakeJWT(user.ID, expiresIn)
+	token, err := auth.MakeJWT(user.ID, time.Hour)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Something went wrong",
+			"error": "Failed to create JWT token",
 		})
 		return
 	}
 
-	// do we already have a refresh token?
 	refreshToken, err := s.Db.GetUserRefreshToken(r.Context(), user.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		refreshToken, err = s.Db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+			Token:     auth.MakeRefreshToken(),
+			UserID:    user.ID,
+			ExpiresAt: time.Now().AddDate(0, 0, 60), // expire in 60 days
+		})
+	}
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Something went wrong",
+			"error": "Failed to retrieve refresh token",
 		})
 		return
 	}
 
+	// reuse refresh token if valid, otherwise, create a new one
 	var newRefreshToken string
 	if auth.IsValidRefreshToken(refreshToken) {
 		newRefreshToken = refreshToken.Token
@@ -115,14 +123,10 @@ func handleRefresh(w http.ResponseWriter, r *http.Request, s *middleware.State) 
 		return
 	}
 
-	newToken := auth.MakeRefreshToken()
-	err = s.Db.SetRefreshToken(r.Context(), database.SetRefreshTokenParams{
-		Token:  newToken,
-		UserID: refreshToken.UserID,
-	})
+	newToken, err := auth.MakeJWT(refreshToken.UserID, time.Hour)
 	if err != nil {
-		SendJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": "Failed to refresh token",
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Failed to create JWT token",
 		})
 		return
 	}

@@ -15,5 +15,6 @@ func MakeRefreshToken() string {
 }
 
 func IsValidRefreshToken(token database.RefreshToken) bool {
-	return token.RevokedAt.Valid && token.ExpiresAt.Compare(time.Now()) == 1
+	// if RevokedAt is null, the token hasn't been revoked
+	return !token.RevokedAt.Valid && token.ExpiresAt.Compare(time.Now()) == 1
 }
