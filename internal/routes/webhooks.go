@@ -2,7 +2,9 @@ package routes
 
 import (
 	"net/http"
+	"os"
 
+	"github.com/faymndev/chirpy/internal/auth"
 	"github.com/faymndev/chirpy/internal/database"
 	"github.com/faymndev/chirpy/internal/middleware"
 	"github.com/google/uuid"
@@ -18,6 +20,14 @@ type webhooks struct {
 }
 
 func (wh *webhooks) handlePolkaEvent(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetApiToken(r.Header)
+	if err != nil || apiKey != os.Getenv("POLKA_API_KEY") {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid API Key",
+		})
+		return
+	}
+
 	type Input struct {
 		Event string `json:"event"`
 		Data  struct {

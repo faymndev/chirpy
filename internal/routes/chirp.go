@@ -22,12 +22,35 @@ func UseChirp(mux *http.ServeMux, state *middleware.State) {
 }
 
 func handleGetChirps(w http.ResponseWriter, r *http.Request, s *middleware.State) {
-	chirps, err := s.Db.GetChirps(r.Context())
+	rawAuthorID := r.URL.Query().Get("author_id")
+
+	var chirps []database.Chirp
+	var err error
+	if rawAuthorID == "" {
+		// get all chirps if an author is not supplied
+		chirps, err = s.Db.GetChirps(r.Context())
+	} else {
+		authorID, err := uuid.Parse(rawAuthorID)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		chirps, err = s.Db.GetChirpsByAuthor(r.Context(), authorID)
+	}
+
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
 		return
+	}
+
+	// by default, chirps are sorted in asc order
+	sortDesc := r.URL.Query().Get("sort") == "desc"
+	if sortDesc {
+		slices.SortFunc(chirps, func(a database.Chirp, b database.Chirp) int {
+			return b.CreatedAt.Compare(a.CreatedAt)
+		})
 	}
 
 	SendJSON(w, http.StatusOK, chirps)
