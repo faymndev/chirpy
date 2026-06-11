@@ -10,3 +10,9 @@ limit 1;
 
 -- name: Reset :exec
 delete from users;
+
+-- name: UpdateUser :one
+update users  
+set email = $1, password = $2, updated_at = now()
+where id = $3
+returning *;

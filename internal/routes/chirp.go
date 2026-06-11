@@ -2,7 +2,6 @@ package routes
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -18,7 +17,20 @@ import (
 func UseChirp(mux *http.ServeMux, state *middleware.State) {
 	mux.Handle("GET /api/chirps", state.Middleware(handleGetChirps))
 	mux.Handle("GET /api/chirps/{chirpID}", state.Middleware(handleGetChirp))
+	mux.Handle("DELETE /api/chirps/{chirpID}", state.Middleware(handleDeleteChirp))
 	mux.Handle("POST /api/chirps", state.Middleware(handleChirp))
+}
+
+func handleGetChirps(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	chirps, err := s.Db.GetChirps(r.Context())
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	SendJSON(w, http.StatusOK, chirps)
 }
 
 func handleGetChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
@@ -46,22 +58,65 @@ func handleGetChirp(w http.ResponseWriter, r *http.Request, s *middleware.State)
 	SendJSON(w, http.StatusOK, chirp)
 }
 
-func handleGetChirps(w http.ResponseWriter, r *http.Request, s *middleware.State) {
-	chirps, err := s.Db.GetChirps(r.Context())
+func handleDeleteChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	userId, err := auth.VerifyJWT(token)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid token",
+		})
+		return
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	chirp, err := s.Db.GetChirp(r.Context(), chirpID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.NotFound(w, r)
+			return
+		}
+
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	if chirp.UserID != userId {
+		SendJSON(w, http.StatusForbidden, map[string]any{
+			"error": "You cannot delete a chirp you are not the author of",
+		})
+		return
+	}
+
+	err = s.Db.DeleteChirp(r.Context(), chirpID)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
-	SendJSON(w, http.StatusOK, chirps)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		SendJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": "JWT token not provided",
+			"error": "Invalid token",
 		})
 		return
 	}
@@ -69,7 +124,7 @@ func handleChirp(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	userID, err := auth.VerifyJWT(token)
 	if err != nil {
 		SendJSON(w, http.StatusUnauthorized, map[string]any{
-			"error": "Invalid JWT token",
+			"error": "Invalid token",
 		})
 		return
 	}

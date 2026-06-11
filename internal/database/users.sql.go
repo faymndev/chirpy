@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createUser = `-- name: CreateUser :one
@@ -59,4 +61,30 @@ delete from users
 func (q *Queries) Reset(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, reset)
 	return err
+}
+
+const updateUser = `-- name: UpdateUser :one
+update users  
+set email = $1, password = $2, updated_at = now()
+where id = $3
+returning id, created_at, updated_at, email, password
+`
+
+type UpdateUserParams struct {
+	Email    string    `json:"email"`
+	Password string    `json:"-"`
+	ID       uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUser, arg.Email, arg.Password, arg.ID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.Password,
+	)
+	return i, err
 }

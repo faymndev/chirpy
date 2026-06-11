@@ -2,12 +2,10 @@ package routes
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
-	"github.com/alexedwards/argon2id"
 	"github.com/faymndev/chirpy/internal/auth"
 	"github.com/faymndev/chirpy/internal/database"
 	"github.com/faymndev/chirpy/internal/middleware"
@@ -43,13 +41,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 		return
 	}
 
-	match, err := argon2id.ComparePasswordAndHash(input.Password, user.Password)
+	err = auth.ComparePassword(input.Password, user.Password)
 	if err != nil {
-		SendJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": "Failed to compare passwords",
-		})
-		return
-	} else if !match {
 		SendJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "Invalid username or password combination",
 		})
@@ -93,6 +86,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 			SendJSON(w, http.StatusInternalServerError, map[string]any{
 				"error": "Something went wrong",
 			})
+			return
 		}
 	}
 
@@ -168,17 +162,19 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 	}
 
 	input, err := DecodeBody[Input](r)
-	if err != nil { 
+	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
-	hashedPassword, err := argon2id.CreateHash(input.Password, argon2id.DefaultParams)
+	hashedPassword, err := auth.HashPassword(input.Password)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Failed to hash password",
 		})
+		return
 	}
 
 	user, err := s.Db.CreateUser(r.Context(), database.CreateUserParams{
@@ -189,6 +185,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
 		})
+		return
 	}
 
 	SendJSON(w, http.StatusCreated, user)
@@ -197,15 +194,52 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 func handleUpdateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		SendJSON(w, http.StatusUnauthorized, map[string]any {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "Invalid token",
 		})
+		return
 	}
 
 	userId, err := auth.VerifyJWT(token)
 	if err != nil {
-		SendJSON(w, http.StatusUnauthorized, map[string]any {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
 			"error": "Invalid token",
 		})
+		return
 	}
+
+	type Input struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	input, err := DecodeBody[Input](r)
+	if err != nil {
+		SendJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(input.Password)
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	user, err := s.Db.UpdateUser(r.Context(), database.UpdateUserParams{
+		ID:       userId,
+		Email:    input.Email,
+		Password: hashedPassword,
+	})
+	if err != nil {
+		SendJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Something went wrong",
+		})
+		return
+	}
+
+	SendJSON(w, http.StatusOK, user)
 }
