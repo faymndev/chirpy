@@ -30,6 +30,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	metrics := routes.UseAdmin(mux, state)
+	routes.UseWebhooks(mux, state)
 	routes.UseChirp(mux, state)
 	routes.UseUsers(mux, state)
 

@@ -163,7 +163,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.Stat
 
 	input, err := DecodeBody[Input](r)
 	if err != nil {
-		SendJSON(w, http.StatusInternalServerError, map[string]any{
+		SendJSON(w, http.StatusBadRequest, map[string]any{
 			"error": "Something went wrong",
 		})
 		return
