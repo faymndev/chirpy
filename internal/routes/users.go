@@ -13,6 +13,8 @@ import (
 
 func UseUsers(mux *http.ServeMux, state *middleware.State) {
 	mux.Handle("POST /api/login", state.Middleware(handleLogin))
+	mux.Handle("POST /api/refresh", state.Middleware(handleRefresh))
+	mux.Handle("POST /api/revoke", state.Middleware(handleRevoke))
 	mux.Handle("POST /api/users", state.Middleware(handleCreateUser))
 }
 
@@ -63,7 +65,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	}
 
 	// do we already have a refresh token?
-	refreshToken, err := s.Db.GetRefreshToken(r.Context(), user.ID)
+	refreshToken, err := s.Db.GetUserRefreshToken(r.Context(), user.ID)
 	if err != nil {
 		SendJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Something went wrong",
@@ -72,7 +74,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	}
 
 	var newRefreshToken string
-	if refreshToken.RevokedAt.Valid && refreshToken.ExpiresAt.Compare(time.Now()) == 1 {
+	if auth.IsValidRefreshToken(refreshToken) {
 		newRefreshToken = refreshToken.Token
 	} else {
 		newRefreshToken = auth.MakeRefreshToken()
@@ -94,6 +96,44 @@ func handleLogin(w http.ResponseWriter, r *http.Request, s *middleware.State) {
 	}
 
 	SendJSON(w, http.StatusOK, UserWithToken{User: user, Token: token, RefreshToken: newRefreshToken})
+}
+
+func handleRefresh(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Refresh token not provided",
+		})
+		return
+	}
+
+	refreshToken, err := s.Db.GetRefreshToken(r.Context(), token)
+	if err != nil || !auth.IsValidRefreshToken(refreshToken) {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Invalid refresh token",
+		})
+		return
+	}
+
+	newToken := auth.MakeRefreshToken()
+	err = s.Db.SetRefreshToken(r.Context(), database.SetRefreshTokenParams{
+		Token:  newToken,
+		UserID: refreshToken.UserID,
+	})
+	if err != nil {
+		SendJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "Failed to refresh token",
+		})
+		return
+	}
+
+	SendJSON(w, http.StatusOK, map[string]any{
+		"token": newToken,
+	})
+}
+
+func handleRevoke(w http.ResponseWriter, r *http.Request, s *middleware.State) {
+
 }
 
 func handleCreateUser(w http.ResponseWriter, r *http.Request, s *middleware.State) {

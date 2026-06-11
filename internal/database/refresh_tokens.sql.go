@@ -41,12 +41,32 @@ func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshToken
 
 const getRefreshToken = `-- name: GetRefreshToken :one
 select token, created_at, updated_at, user_id, expires_at, revoked_at from refresh_tokens
+where token = $1
+limit 1
+`
+
+func (q *Queries) GetRefreshToken(ctx context.Context, token string) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, getRefreshToken, token)
+	var i RefreshToken
+	err := row.Scan(
+		&i.Token,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UserID,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+	)
+	return i, err
+}
+
+const getUserRefreshToken = `-- name: GetUserRefreshToken :one
+select token, created_at, updated_at, user_id, expires_at, revoked_at from refresh_tokens
 where user_id = $1
 limit 1
 `
 
-func (q *Queries) GetRefreshToken(ctx context.Context, userID uuid.UUID) (RefreshToken, error) {
-	row := q.db.QueryRowContext(ctx, getRefreshToken, userID)
+func (q *Queries) GetUserRefreshToken(ctx context.Context, userID uuid.UUID) (RefreshToken, error) {
+	row := q.db.QueryRowContext(ctx, getUserRefreshToken, userID)
 	var i RefreshToken
 	err := row.Scan(
 		&i.Token,

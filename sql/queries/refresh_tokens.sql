@@ -4,9 +4,14 @@ values ($1, $2, $3)
 returning *;
 
 
--- name: GetRefreshToken :one
+-- name: GetUserRefreshToken :one
 select * from refresh_tokens
 where user_id = $1
+limit 1;
+
+-- name: GetRefreshToken :one
+select * from refresh_tokens
+where token = $1
 limit 1;
 
 -- name: RevokeRefreshToken :exec 
